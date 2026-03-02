@@ -1,0 +1,19 @@
+# ArXiv 论文翻译器依赖
+
+# OpenAI API 客户端
+openai>=1.0.0
+
+# Token 计数
+tiktoken>=0.3.3
+
+# 日志
+loguru>=0.7.0
+
+# 数值计算（用于 Latex 切分）
+numpy>=1.20.0
+
+# PDF 处理（可选，用于生成对比 PDF）
+PyPDF2>=2.0.0
+
+# Latex 编译需要系统安装 texlive 或 miktex
+# 请确保 pdflatex 或 xelatex 在 PATH 中

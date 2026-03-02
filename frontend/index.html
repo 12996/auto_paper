@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ArXiv 论文翻译系统</title>
+  <meta name="description" content="自动化 ArXiv 论文搜索、AI摘要与中英双语翻译管理平台" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+<!-- ===== 顶部导航 ===== -->
+<header class="topbar">
+  <div class="topbar-left">
+    <span class="logo-icon">🔬</span>
+    <span class="logo-text">ArXiv 论文翻译系统</span>
+  </div>
+  <div class="topbar-right">
+    <button class="btn btn-ghost" id="btn-search-panel" title="开始搜索">🔍 新搜索</button>
+    <button class="btn btn-ghost" id="btn-logs" title="查看日志">📋 日志</button>
+  </div>
+</header>
+
+<!-- ===== 主体：列表页 ===== -->
+<main id="page-list" class="page active">
+  <!-- 统计卡片 -->
+  <section class="stats-row" id="stats-row">
+    <div class="stat-card" id="stat-discovered">
+      <div class="stat-icon">📄</div>
+      <div class="stat-body">
+        <div class="stat-num" id="stat-num-discovered">—</div>
+        <div class="stat-label">已发现</div>
+      </div>
+    </div>
+    <div class="stat-card" id="stat-summarized">
+      <div class="stat-icon">✅</div>
+      <div class="stat-body">
+        <div class="stat-num" id="stat-num-summarized">—</div>
+        <div class="stat-label">已总结</div>
+      </div>
+    </div>
+    <div class="stat-card" id="stat-translated">
+      <div class="stat-icon">🌐</div>
+      <div class="stat-body">
+        <div class="stat-num" id="stat-num-translated">—</div>
+        <div class="stat-label">已翻译</div>
+      </div>
+    </div>
+    <div class="stat-card stat-card--warn" id="stat-failed">
+      <div class="stat-icon">⚠️</div>
+      <div class="stat-body">
+        <div class="stat-num" id="stat-num-failed">—</div>
+        <div class="stat-label">失败</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 过滤标签 + 列表 -->
+  <section class="list-section">
+    <div class="filter-bar">
+      <button class="filter-btn active" data-status="">全部</button>
+      <button class="filter-btn" data-status="translated">已翻译</button>
+      <button class="filter-btn" data-status="summarized">已总结</button>
+      <button class="filter-btn" data-status="pending">处理中</button>
+      <button class="filter-btn" data-status="failed">失败</button>
+    </div>
+
+    <div id="paper-list-container">
+      <div id="paper-list"></div>
+      <div id="empty-state" class="empty-state hidden">
+        <div class="empty-icon">📭</div>
+        <p>暂无论文，请使用「新搜索」功能添加论文</p>
+      </div>
+      <div id="error-state" class="empty-state hidden">
+        <div class="empty-icon">🔌</div>
+        <p>无法连接到后端服务，请确保 server.py 正在运行</p>
+        <button class="btn btn-primary" onclick="loadStats(); loadPapers()">重新连接</button>
+      </div>
+    </div>
+
+    <!-- 分页 -->
+    <div class="pagination" id="pagination"></div>
+  </section>
+</main>
+
+<!-- ===== 详情页 ===== -->
+<main id="page-detail" class="page">
+  <div class="detail-header">
+    <button class="btn btn-ghost back-btn" id="btn-back">← 返回列表</button>
+    <div class="detail-meta" id="detail-meta"></div>
+    <div class="detail-actions" id="detail-actions"></div>
+  </div>
+  <div class="detail-body">
+    <div id="pdf-viewer-wrap">
+      <iframe id="pdf-iframe" title="论文 PDF 查看器"></iframe>
+    </div>
+    <div id="pdf-placeholder" class="pdf-placeholder hidden"></div>
+  </div>
+</main>
+
+<!-- ===== 日志页 ===== -->
+<main id="page-logs" class="page">
+  <div class="logs-header">
+    <button class="btn btn-ghost back-btn" id="btn-back-logs">← 返回列表</button>
+    <span class="logs-title">📋 系统日志</span>
+    <button class="btn btn-ghost" id="btn-refresh-logs">刷新</button>
+  </div>
+  <pre id="log-content" class="log-content">加载中...</pre>
+</main>
+
+<!-- ===== 搜索弹窗 ===== -->
+<div class="modal-overlay hidden" id="search-modal-overlay">
+  <div class="modal" id="search-modal">
+    <div class="modal-header">
+      <span class="modal-title">🔍 搜索 ArXiv 论文</span>
+      <button class="modal-close" id="btn-close-search">✕</button>
+    </div>
+    <div class="modal-body">
+      <!-- 搜索历史快捷按钮 -->
+      <div id="search-history-row" class="search-history-row hidden">
+        <p class="field-label">最近搜索</p>
+        <div id="search-history-chips"></div>
+      </div>
+
+      <label class="field-label" for="input-query">搜索词 <span class="required">*</span></label>
+      <input type="text" id="input-query" class="field-input"
+             placeholder='例：ti:diffusion model  /  all:contrastive learning' />
+      <p class="field-hint">支持 ArXiv 搜索语法：<code>ti:</code>(标题) <code>au:</code>(作者) <code>all:</code>(全域)</p>
+
+      <label class="field-label" for="input-keyword">研究领域关键词</label>
+      <input type="text" id="input-keyword" class="field-input"
+             placeholder='例：multimodal learning（用于引导 AI 摘要质量）' />
+
+      <div class="form-row">
+        <div class="form-col">
+          <label class="field-label" for="input-days">最近 N 天</label>
+          <input type="number" id="input-days" class="field-input" value="30" min="1" max="365" />
+        </div>
+        <div class="form-col">
+          <label class="field-label" for="input-max">最多论文数</label>
+          <input type="number" id="input-max" class="field-input" value="10" min="1" max="50" />
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" id="btn-cancel-search">取消</button>
+      <button class="btn btn-primary" id="btn-submit-search">🚀 开始搜索</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== 悬浮进度面板 ===== -->
+<div class="progress-panel hidden" id="progress-panel">
+  <div class="progress-panel-header">
+    <span>📦 任务队列</span>
+    <button class="progress-panel-toggle" id="btn-toggle-panel">−</button>
+  </div>
+  <div class="progress-panel-body" id="progress-panel-body">
+    <div class="progress-fraction" id="progress-fraction">0 / 0</div>
+    <div class="progress-bar-wrap">
+      <div class="progress-bar-fill" id="progress-bar-fill" style="width:0%"></div>
+    </div>
+    <div class="progress-current" id="progress-current">—</div>
+    <div class="progress-pending" id="progress-pending"></div>
+  </div>
+</div>
+
+<!-- ===== Toast 通知 ===== -->
+<div id="toast-container"></div>
+
+<script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,27 @@
+# Python cache and venv
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.venv/
+venv/
+
+# Local runtime artifacts
+*.log
+*.db
+*.sqlite
+*.sqlite3
+
+# Project generated outputs
+output/
+pdf_files/
+export/
+arxiv_translator/arxiv_cache/
+arxiv_cache/
+*.pdf
+
+# OS/editor files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

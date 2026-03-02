@@ -1,0 +1,229 @@
+# 将论文爬取 & 总结功能抽象为独立可复用模块
+
+## 背景
+
+当前 [chat_arxiv.py](file:///f:/claude/ChatPaper/chat_arxiv.py)、[chat_paper.py](file:///f:/claude/ChatPaper/chat_paper.py)、[chat_translate.py](file:///f:/claude/ChatPaper/chat_translate.py) 三个文件存在大量重复代码：
+
+| 重复项 | 出现位置 | 行数估算 |
+|---|---|---|
+| [Paper](file:///f:/claude/ChatPaper/chat_paper.py#37-295) 类（PDF 解析） | [chat_arxiv.py](file:///f:/claude/ChatPaper/chat_arxiv.py) + [chat_paper.py](file:///f:/claude/ChatPaper/chat_paper.py) | ~260 行 × 2 |
+| LLM API 调用（本地/OpenAI/Azure） | 三个文件中的每个 `chat_*` 方法 | ~80 行 × 6+ |
+| 配置加载（[apikey.ini](file:///f:/claude/ChatPaper/apikey.ini) 读取） | `Reader.__init__` × 2, [load_local_model_config](file:///f:/claude/ChatPaper/chat_translate.py#37-52) | ~40 行 × 3 |
+| 论文爬取逻辑 | `Reader.get_arxiv_web` / `Reader.filter_arxiv` | 各 ~80 行 |
+| 论文总结流程（summary/method/conclusion） | `Reader.summary_with_chat` × 2 | ~130 行 × 2 |
+
+目标是将这些功能抽取到 `core/` 包中，使每个模块**职责单一、可独立测试、可被外部调用**。
+
+---
+
+## Proposed Changes
+
+### 1. `core/` 包结构（全部新建）
+
+```
+f:\claude\ChatPaper\core\
+├── __init__.py          # 包入口，导出主要类
+├── config.py            # 统一配置加载
+├── llm_client.py        # 统一 LLM API 调用层
+├── paper.py             # Paper 类（PDF 解析）
+├── crawler.py           # 论文爬取（arXiv Web / arXiv API）
+├── summarizer.py        # 论文总结（summary / method / conclusion）
+├── translator.py        # 论文翻译
+└── utils.py             # 通用工具（文件名清理、Markdown 导出等）
+```
+
+---
+
+#### [NEW] [\_\_init\_\_.py](file:///f:/claude/ChatPaper/core/__init__.py)
+
+从各模块导出主要公共接口。
+
+---
+
+#### [NEW] [config.py](file:///f:/claude/ChatPaper/core/config.py)
+
+**统一配置管理**，合并三个文件中重复的 [apikey.ini](file:///f:/claude/ChatPaper/apikey.ini) 读取逻辑：
+
+```python
+class AppConfig:
+    """读取 apikey.ini，一次性加载所有配置"""
+    def __init__(self, config_path='apikey.ini'):
+        ...
+    @property
+    def use_local_model(self) -> bool: ...
+    @property
+    def local_model_config(self) -> dict: ...  # api_base, api_key, model
+    @property
+    def openai_config(self) -> dict: ...        # api_base, api_keys, model
+    @property
+    def azure_config(self) -> dict: ...         # api_base, api_key, model, version
+    @property
+    def gitee_config(self) -> dict: ...         # api, owner, repo, path
+```
+
+---
+
+#### [NEW] [llm_client.py](file:///f:/claude/ChatPaper/core/llm_client.py)
+
+**统一 LLM 调用接口**，消除各 `chat_*` 方法中重复的 API 调用代码：
+
+```python
+class LLMClient:
+    """统一封装本地模型 / OpenAI / Azure 的调用"""
+    def __init__(self, config: AppConfig):
+        ...
+    def chat(self, messages: list, session_id=None) -> LLMResponse:
+        """发送消息并返回统一格式的响应"""
+        ...
+```
+
+- 自动轮询 API key
+- 支持 `session_id`（本地模型多轮对话）
+- 返回统一的 `LLMResponse` 数据类（result, session_id, usage）
+
+---
+
+#### [NEW] [paper.py](file:///f:/claude/ChatPaper/core/paper.py)
+
+从 [chat_paper.py](file:///f:/claude/ChatPaper/chat_paper.py) 和 [chat_arxiv.py](file:///f:/claude/ChatPaper/chat_arxiv.py) 中合并 **唯一的 [Paper](file:///f:/claude/ChatPaper/chat_paper.py#37-295) 类**：
+
+- 保留 [parse_pdf](file:///f:/claude/ChatPaper/chat_paper.py#57-67), [get_title](file:///f:/claude/ChatPaper/chat_paper.py#158-199), [get_chapter_names](file:///f:/claude/ChatPaper/chat_paper.py#133-157), [get_image_path](file:///f:/claude/ChatPaper/chat_paper.py#77-131) 等方法
+- 完全兼容现有接口
+
+---
+
+#### [NEW] [crawler.py](file:///f:/claude/ChatPaper/core/crawler.py)
+
+抽取论文爬取逻辑：
+
+```python
+class ArxivWebCrawler:
+    """通过 arXiv 网页搜索和下载论文（来自 chat_arxiv.py）"""
+    def search(self, query, page_num, days, max_results) -> list[Paper]: ...
+
+class ArxivAPICrawler:
+    """通过 arXiv API 搜索和下载论文（来自 chat_paper.py）"""
+    def search(self, query, sort, max_results, filter_keys) -> list[Paper]: ...
+```
+
+- 将 `Reader.get_url`, [get_titles](file:///f:/claude/ChatPaper/chat_arxiv.py#381-412), [get_all_titles_from_web](file:///f:/claude/ChatPaper/chat_arxiv.py#414-428), [get_arxiv_web](file:///f:/claude/ChatPaper/chat_arxiv.py#429-444), [download_pdf](file:///f:/claude/ChatPaper/chat_arxiv.py#451-463) 提取到 `ArxivWebCrawler`
+- 将 `Reader.get_arxiv`, [filter_arxiv](file:///f:/claude/ChatPaper/chat_paper.py#376-402), [download_pdf](file:///f:/claude/ChatPaper/chat_arxiv.py#451-463) 提取到 `ArxivAPICrawler`
+
+---
+
+#### [NEW] [summarizer.py](file:///f:/claude/ChatPaper/core/summarizer.py)
+
+抽取论文总结功能：
+
+```python
+class PaperSummarizer:
+    """使用 LLM 对论文进行总结（summary + method + conclusion）"""
+    def __init__(self, llm_client: LLMClient, key_word: str, language: str): ...
+    def summarize(self, paper: Paper) -> SummaryResult: ...
+    def summarize_batch(self, papers: list[Paper], export_path: str): ...
+```
+
+- 合并 [chat_arxiv.py](file:///f:/claude/ChatPaper/chat_arxiv.py) 和 [chat_paper.py](file:///f:/claude/ChatPaper/chat_paper.py) 中的 [summary_with_chat](file:///f:/claude/ChatPaper/chat_paper.py#488-604), [chat_summary](file:///f:/claude/ChatPaper/chat_paper.py#757-841), [chat_method](file:///f:/claude/ChatPaper/chat_arxiv.py#711-818), [chat_conclusion](file:///f:/claude/ChatPaper/chat_paper.py#605-679)
+- 输出统一的 `SummaryResult` 数据类
+
+---
+
+#### [NEW] [translator.py](file:///f:/claude/ChatPaper/core/translator.py)
+
+抽取论文翻译功能：
+
+```python
+class PaperTranslator:
+    """使用 LLM 对论文进行翻译/润色"""
+    def __init__(self, llm_client: LLMClient): ...
+    def translate_paper(self, pdf_path: str, output_path: str, task: str = "翻译"): ...
+    def check_domain(self, title: str, abstract: str) -> str: ...
+```
+
+- 迁移 [chat_translate.py](file:///f:/claude/ChatPaper/chat_translate.py) 中的 [main](file:///f:/claude/ChatPaper/chat_translate.py#306-407), [chat_translate_part](file:///f:/claude/ChatPaper/chat_translate.py#118-242), [chat_check_domain](file:///f:/claude/ChatPaper/chat_translate.py#243-305), [parse_pdf](file:///f:/claude/ChatPaper/chat_paper.py#57-67)
+
+---
+
+#### [NEW] [utils.py](file:///f:/claude/ChatPaper/core/utils.py)
+
+通用工具函数：
+
+- `validate_title(title)` — 清理文件名
+- [export_to_markdown(text, file_name, mode)](file:///f:/claude/ChatPaper/chat_paper.py#842-851) — 导出 Markdown
+- [LazyloadTiktoken](file:///f:/claude/ChatPaper/chat_translate.py#14-32) — 延迟加载 tokenizer
+
+---
+
+### 2. 原文件重构
+
+#### [MODIFY] [chat_arxiv.py](file:///f:/claude/ChatPaper/chat_arxiv.py)
+
+- 删除内联的 [Paper](file:///f:/claude/ChatPaper/chat_paper.py#37-295) 和 [Reader](file:///f:/claude/ChatPaper/chat_paper.py#298-856) 类
+- 改为 `from core import ...` 调用
+- [chat_arxiv_main](file:///f:/claude/ChatPaper/chat_arxiv.py#948-957) 保留为入口函数，使用新模块组装
+
+#### [MODIFY] [chat_paper.py](file:///f:/claude/ChatPaper/chat_paper.py)
+
+- 同上，删除内联代码，改为引用 `core` 模块
+
+#### [MODIFY] [chat_translate.py](file:///f:/claude/ChatPaper/chat_translate.py)
+
+- 保持 [main()](file:///f:/claude/ChatPaper/chat_translate.py#306-407) 入口和命令行接口
+- 内部逻辑改为调用 `core.translator.PaperTranslator`
+
+---
+
+## User Review Required
+
+> [!IMPORTANT]
+> 此重构会修改 [chat_arxiv.py](file:///f:/claude/ChatPaper/chat_arxiv.py)、[chat_paper.py](file:///f:/claude/ChatPaper/chat_paper.py)、[chat_translate.py](file:///f:/claude/ChatPaper/chat_translate.py) 三个文件的内部实现。**对外接口（命令行参数、输出格式）保持完全兼容**，不会影响现有用户的使用方式。
+
+> [!NOTE]
+> [chat_paper.py](file:///f:/claude/ChatPaper/chat_paper.py) 中的 [Reader](file:///f:/claude/ChatPaper/chat_paper.py#298-856) 使用了 [arxiv](file:///f:/claude/ChatPaper/chat_paper.py#368-375) Python 库的 API 接口来搜索，而 [chat_arxiv.py](file:///f:/claude/ChatPaper/chat_arxiv.py) 使用的是网页爬虫。抽象后两种方式 (`ArxivAPICrawler` / `ArxivWebCrawler`) 会分别保留，通过不同的 Crawler 类来使用。
+
+---
+
+## Verification Plan
+
+### Automated Tests
+
+由于原项目无测试，且功能涉及外部 API 调用和 PDF 解析，完全自动化测试有困难。以下验证方式：
+
+1. **Python 导入验证**（确保模块无语法错误且可正常导入）：
+   ```bash
+   cd f:\claude\ChatPaper
+   python -c "from core.config import AppConfig; from core.paper import Paper; from core.llm_client import LLMClient; from core.crawler import ArxivWebCrawler, ArxivAPICrawler; from core.summarizer import PaperSummarizer; from core.translator import PaperTranslator; print('All imports OK')"
+   ```
+
+2. **Paper 类 PDF 解析验证**（使用项目自带的 [demo.pdf](file:///f:/claude/ChatPaper/demo.pdf)）：
+   ```bash
+   cd f:\claude\ChatPaper
+   python -c "from core.paper import Paper; p = Paper(path='demo.pdf'); print('Title:', p.title); print('Sections:', list(p.section_text_dict.keys()))"
+   ```
+
+3. **配置加载验证**：
+   ```bash
+   cd f:\claude\ChatPaper
+   python -c "from core.config import AppConfig; c = AppConfig(); print('use_local:', c.use_local_model); print('local_config:', c.local_model_config)"
+   ```
+
+### Manual Verification
+
+由于论文搜索和 LLM 调用需要实际的 API 服务（本地 DeepSeek 或 OpenAI key），以下需要用户手动验证：
+
+1. **运行 [chat_paper.py](file:///f:/claude/ChatPaper/chat_paper.py)**：使用 [demo.pdf](file:///f:/claude/ChatPaper/demo.pdf) 测试论文总结流程
+   ```bash
+   python chat_paper.py --pdf_path demo.pdf --language zh
+   ```
+   检查 [export/](file:///f:/claude/ChatPaper/chat_paper.py#842-851) 目录下是否生成了与重构前格式一致的 Markdown 文件
+
+2. **运行 [chat_translate.py](file:///f:/claude/ChatPaper/chat_translate.py)**：测试论文翻译流程
+   ```bash
+   python chat_translate.py
+   ```
+   检查是否生成了翻译后的 [.md](file:///f:/claude/ChatPaper/claude.md) 文件
+
+3. **运行 [chat_arxiv.py](file:///f:/claude/ChatPaper/chat_arxiv.py)**（需联网）：测试论文搜索流程
+   ```bash
+   python chat_arxiv.py --query "deep learning" --max_results 1 --days 10
+   ```
