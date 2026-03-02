@@ -11,8 +11,8 @@ from typing import Optional
 
 import tenacity
 
-from core.llm_client import LLMClient, LLMResponse
-from core.utils import LazyloadTiktoken
+from arxiv_finder.llm_client import LLMClient, LLMResponse
+from arxiv_finder.utils import LazyloadTiktoken
 
 
 # =============================================================================

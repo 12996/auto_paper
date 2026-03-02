@@ -11,8 +11,8 @@ import requests
 import tenacity
 from bs4 import BeautifulSoup
 
-from core.paper import Paper
-from core.utils import validate_title
+from arxiv_finder.paper import Paper
+from arxiv_finder.utils import validate_title
 
 
 # =============================================================================

@@ -9,11 +9,10 @@ import os
 import sys
 from collections import namedtuple
 
-from core.config import AppConfig
-from core.llm_client import LLMClient
-from core.crawler import ArxivWebCrawler
-from core.summarizer import PaperSummarizer
-from core.paper import Paper
+from arxiv_finder.config import AppConfig
+from arxiv_finder.llm_client import LLMClient
+from arxiv_finder.crawler import ArxivWebCrawler
+from arxiv_finder.summarizer import PaperSummarizer
 
 
 # =============================================================================

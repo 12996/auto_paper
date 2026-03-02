@@ -57,9 +57,7 @@ def trigger_search():
     import threading
     def _crawl_and_enqueue():
         try:
-            from core.config import AppConfig
-            from core.llm_client import LLMClient
-            from core.crawler import ArxivWebCrawler
+            from arxiv_finder.crawler import ArxivWebCrawler
 
             crawler = ArxivWebCrawler(root_path=str(ROOT))
             papers = crawler.search(

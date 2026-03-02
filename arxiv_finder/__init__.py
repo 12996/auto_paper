@@ -3,11 +3,11 @@
 # 提供论文爬取、PDF 解析、LLM 调用、总结和翻译的独立接口。
 #
 # 用法示例:
-#   from core.config import AppConfig
-#   from core.paper import Paper
-#   from core.llm_client import LLMClient
-#   from core.crawler import ArxivWebCrawler
-#   from core.summarizer import PaperSummarizer
-#   from core.translator import PaperTranslator
+#   from arxiv_finder.config import AppConfig
+#   from arxiv_finder.paper import Paper
+#   from arxiv_finder.llm_client import LLMClient
+#   from arxiv_finder.crawler import ArxivWebCrawler
+#   from arxiv_finder.summarizer import PaperSummarizer
+#   from arxiv_finder.translator import PaperTranslator
 #
 # 按需导入各子模块，避免不必要的依赖加载。

@@ -50,6 +50,7 @@ import os
 import sys
 import argparse
 import time
+import glob
 from pathlib import Path
 from typing import Optional
 
@@ -59,8 +60,8 @@ from loguru import logger
 sys.path.insert(0, str(Path(__file__).parent))
 
 # 导入项目模块
-from arxiv_downloader import ArxivDownloader
-from latex_processor import (
+from arxiv_translator.arxiv_downloader import ArxivDownloader
+from arxiv_translator.latex_processor import (
     LatexPaperSplit,
     LatexPaperFileGroup,
     Latex精细分解与转化,
@@ -69,7 +70,7 @@ from latex_processor import (
     merge_tex_files,
     objdump,
 )
-from latex_processor.latex_toolbox import pj, glob
+from arxiv_translator.latex_processor.latex_toolbox import pj
 from llm_client import LLMClient, translate_batch, generate_translation_prompts
 from llm_client.prompts import switch_prompt
 
