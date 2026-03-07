@@ -5,10 +5,6 @@ latex_processor/latex_actions.py
 ================================================================================
 Latex 论文处理核心逻辑
 
-【来源说明】
-本模块从 gpt_academic 项目抽取，主要来源：
-- 原文件: gpt_academic/crazy_functions/latex_fns/latex_actions.py
-- 原行号: 第1-574行（完整文件）
 
 【核心类和函数】
 ┌─────────────────────────────────────────────────────────────────────────────┐
@@ -95,7 +91,6 @@ def split_subprocess(txt: str, project_folder: str, return_dict: dict, opts: lis
     """
     在子进程中执行 Latex 文件切分
 
-    【来源】gpt_academic/crazy_functions/latex_fns/latex_actions.py:19-82
 
     切分规则说明:
         1. 保留区域 (PRESERVE) - 不翻译:
@@ -240,8 +235,6 @@ class LatexPaperSplit:
     """
     Latex 文件智能切分器
 
-    【来源】gpt_academic/crazy_functions/latex_fns/latex_actions.py:84-168
-
     功能:
         - 将 Latex 文件切分为链表结构
         - 标记哪些部分需要翻译，哪些需要保留
@@ -256,18 +249,17 @@ class LatexPaperSplit:
 
     def __init__(self) -> None:
         self.nodes = None
-        self.msg = "*{\\scriptsize\\textbf{警告：该PDF由GPT-Academic开源项目调用大语言模型+Latex翻译插件一键生成，" + \
+        self.msg = "*{\\scriptsize\\textbf{警告：该" + \
             "版权归原文作者所有。翻译内容可靠性无保障，请仔细鉴别并以原文为准。" + \
-            "项目Github地址 \\url{https://github.com/binary-husky/gpt_academic/}。"
-        self.msg_declare = "为了防止大语言模型的意外谬误产生扩散影响，禁止移除或修改此警告。}}\\\\"
+            ""
+        # 历史模板会在 merge_result() 中拼接 msg_declare，默认给空串避免属性缺失。
+        self.msg_declare = ""
         self.title = "unknown"
         self.abstract = "unknown"
 
     def read_title_and_abstract(self, txt: str):
         """
         读取论文标题和摘要
-
-        【来源】gpt_academic/crazy_functions/latex_fns/latex_actions.py:100-108
         """
         try:
             title, abstract = find_title_and_abs(txt)
@@ -282,7 +274,6 @@ class LatexPaperSplit:
         """
         合并翻译结果
 
-        【来源】gpt_academic/crazy_functions/latex_fns/latex_actions.py:110-147
 
         Args:
             arr: 翻译结果数组
@@ -333,7 +324,7 @@ class LatexPaperSplit:
         """
         执行切分
 
-        【来源】gpt_academic/crazy_functions/latex_fns/latex_actions.py:150-168
+
 
         使用多进程避免超时。
 
@@ -367,8 +358,6 @@ class LatexPaperFileGroup:
     """
     按 token 限制对文本进行分组
 
-    【来源】gpt_academic/crazy_functions/latex_fns/latex_actions.py:171-215
-
     功能:
         - 将文本片段按 token 数量分组
         - 超过限制的片段会被拆分
@@ -400,8 +389,6 @@ class LatexPaperFileGroup:
         """
         按 token 限制拆分文件
 
-        【来源】gpt_academic/crazy_functions/latex_fns/latex_actions.py:187-202
-
         Args:
             max_token_limit: 每个 fragment 的最大 token 数
         """
@@ -423,7 +410,6 @@ class LatexPaperFileGroup:
         """
         合并拆分后的结果
 
-        【来源】gpt_academic/crazy_functions/latex_fns/latex_actions.py:204-207
         """
         self.file_result = ["" for _ in range(len(self.file_paths))]
         for r, k in zip(self.sp_file_result, self.sp_file_index):
@@ -433,7 +419,6 @@ class LatexPaperFileGroup:
         """
         写入结果文件
 
-        【来源】gpt_academic/crazy_functions/latex_fns/latex_actions.py:209-215
 
         Returns:
             生成的文件路径列表
@@ -463,7 +448,6 @@ def Latex精细分解与转化(
     """
     Latex 精细分解与转化的主函数
 
-    【来源】gpt_academic/crazy_functions/latex_fns/latex_actions.py:218-317
 
     完整流程:
         1. 找到主 tex 文件
@@ -564,8 +548,6 @@ def remove_buggy_lines(
     """
     从编译日志中提取错误行，并回退翻译
 
-    【来源】gpt_academic/crazy_functions/latex_fns/latex_actions.py:320-344
-
     Args:
         file_path: tex 文件路径
         log_path: 编译日志路径
@@ -635,7 +617,6 @@ def 编译Latex(
     """
     编译 Latex 生成 PDF
 
-    【来源】gpt_academic/crazy_functions/latex_fns/latex_actions.py:347-478
 
     支持的编译器:
         - pdflatex (默认)
@@ -811,8 +792,6 @@ def 编译Latex(
 def write_html(sp_file_contents: List[str], sp_file_result: List[str], project_folder: str) -> str:
     """
     生成翻译对比 HTML 报告
-
-    【来源】gpt_academic/crazy_functions/latex_fns/latex_actions.py:481-506
 
     Args:
         sp_file_contents: 原文片段列表

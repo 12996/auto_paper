@@ -16,6 +16,11 @@ API 接口一览:
     GET  /api/papers                          论文列表（?status=&page=&page_size=）
     GET  /api/papers/<arxiv_id>               论文详情
     POST /api/papers/<arxiv_id>/retry         失败重试
+    POST /api/papers/<arxiv_id>/translate     手动触发翻译
+    POST /api/papers/<arxiv_id>/interrupt     中断翻译任务
+    POST /api/papers/<arxiv_id>/reset         重置并重新摘要
+    DELETE /api/papers/<arxiv_id>             删除单篇论文
+    DELETE /api/papers?status=failed          批量清空失败论文
     POST /api/search                          触发搜索（body: query/keyword/days/max）
     GET  /api/searches                        最近搜索历史
     GET  /api/queue/status                    后台队列进度
@@ -36,10 +41,38 @@ from worker import get_scheduler
 from db import get_db_manager
 
 
+def setup_logging(verbose: bool = False) -> None:
+    """为 server 模式配置终端 + 文件日志输出。"""
+    level = "DEBUG" if verbose else "INFO"
+    logger.remove()
+    logger.add(
+        sys.stderr,
+        level=level,
+        format="<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | <level>{level: <8}</level> | <cyan>{name}:{function}:{line}</cyan> - <level>{message}</level>",
+    )
+    logger.add(
+        ROOT / "arxiv_translator.log",
+        level="DEBUG",
+        rotation="10 MB",
+        encoding="utf-8",
+        enqueue=True,
+        backtrace=True,
+        diagnose=False,
+    )
+
+
 def main():
+    setup_logging()
     # 初始化数据库（首次运行自动建表）
     db = get_db_manager()
     logger.info(f"数据库已就绪: {db.db_path}")
+
+    # 修复上次崩溃遗留的僵尸 RUNNING 任务
+    fixed = db.reset_stuck_tasks()
+    if fixed:
+        logger.warning(f"[启动检查] 发现并修复了 {fixed} 个僵尸任务（RUNNING → PENDING）")
+    else:
+        logger.info("[启动检查] 无僵尸任务")
 
     # 启动后台 Worker
     scheduler = get_scheduler()

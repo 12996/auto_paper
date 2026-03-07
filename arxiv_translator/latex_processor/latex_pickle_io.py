@@ -5,10 +5,6 @@ latex_processor/latex_pickle_io.py
 ================================================================================
 序列化工具
 
-【来源说明】
-本模块从 gpt_academic 项目完整抽取：
-- 原文件: gpt_academic/crazy_functions/latex_fns/latex_pickle_io.py
-- 原行号: 第1-49行（完整文件）
 
 【功能】
 安全的 pickle 序列化和反序列化，支持白名单类
@@ -22,8 +18,6 @@ from typing import Any
 class SafeUnpickler(pickle.Unpickler):
     """
     安全的反序列化器
-
-    【来源】gpt_academic/crazy_functions/latex_fns/latex_pickle_io.py:6-32
 
     只允许反序列化白名单中的类，防止恶意代码执行。
     """
@@ -51,8 +45,6 @@ class SafeUnpickler(pickle.Unpickler):
     def find_class(self, module: str, name: str):
         """
         查找类，只允许白名单中的类
-
-        【来源】gpt_academic/crazy_functions/latex_fns/latex_pickle_io.py:23-32
         """
         self.safe_classes = self.get_safe_classes()
         match_class_name = None
@@ -72,7 +64,6 @@ def objdump(obj: Any, file: str = "objdump.tmp") -> None:
     """
     序列化对象到文件
 
-    【来源】gpt_academic/crazy_functions/latex_fns/latex_pickle_io.py:34-38
 
     Args:
         obj: 要序列化的对象
@@ -85,8 +76,6 @@ def objdump(obj: Any, file: str = "objdump.tmp") -> None:
 def objload(file: str = "objdump.tmp") -> Any:
     """
     从文件反序列化对象
-
-    【来源】gpt_academic/crazy_functions/latex_fns/latex_pickle_io.py:41-48
 
     Args:
         file: 输入文件路径

@@ -5,21 +5,6 @@ main.py
 ================================================================================
 ArXiv 论文翻译器 - 命令行入口
 
-【来源说明】
-本模块整合了以下 gpt_academic 项目的功能：
-
-1. 论文下载
-   - 来源: gpt_academic/crazy_functions/Latex_Function.py:91-178
-   - 方法: arxiv_download()
-
-2. Latex 处理
-   - 来源: gpt_academic/crazy_functions/latex_fns/latex_actions.py
-   - 方法: Latex精细分解与转化(), 编译Latex()
-
-3. 多线程翻译
-   - 来源: gpt_academic/crazy_functions/crazy_utils.py:187-350
-   - 方法: request_gpt_model_multi_threads_with_very_awesome_ui_and_high_efficiency()
-
 【使用方法】
     python main.py <arxiv_id_or_url> [options]
 
@@ -164,10 +149,20 @@ def translate_arxiv_paper(
         logger.info(f"使用本地文件: {extract_path}")
         arxiv_id = extract_path.name
 
+    cancel_flag = Path(cache_dir) / arxiv_id / ".cancel_translate"
+
+    def should_abort() -> bool:
+        return cancel_flag.exists()
+
+    def ensure_not_cancelled(stage: str) -> None:
+        if should_abort():
+            raise RuntimeError(f"用户手动中断翻译任务（{stage}）")
+
     logger.info(f"论文 ID: {arxiv_id}")
     logger.info(f"解压路径: {extract_path}")
 
     # ==================== 2. 解析 Latex ====================
+    ensure_not_cancelled("下载完成后")
     logger.info("=" * 60)
     logger.info("步骤 2/5: 解析 Latex 文件")
     logger.info("=" * 60)
@@ -248,6 +243,7 @@ def translate_arxiv_paper(
     logger.info("Latex 文件合并完成")
 
     # ==================== 3. 切分 Latex ====================
+    ensure_not_cancelled("Latex 解析后")
     logger.info("=" * 60)
     logger.info("步骤 3/5: 切分 Latex 文件")
     logger.info("=" * 60)
@@ -289,6 +285,7 @@ def translate_arxiv_paper(
     logger.info(f"按 token 限制分组后，共 {n_split} 个翻译任务")
 
     # ==================== 4. 多线程翻译 ====================
+    ensure_not_cancelled("翻译前")
     logger.info("=" * 60)
     logger.info("步骤 4/5: 调用 LLM 翻译")
     logger.info("=" * 60)
@@ -309,21 +306,28 @@ def translate_arxiv_paper(
 
     # 执行翻译
     logger.info(f"开始翻译，并发数: {max_workers}")
+    def progress_callback_with_cancel(index: int, total: int, status: str):
+        ensure_not_cancelled("翻译进行中")
+        progress_callback(index, total, status)
+
     results = translate_batch(
         texts=["" for _ in range(n_split)],  # text 已包含在 inputs_array (user_prompts) 中
         system_prompts=sys_prompt_array,
         user_prompts=inputs_array,  # inputs_array 包含完整翻译指令+原文
         llm_client=llm_client,
         max_workers=max_workers,
-        callback=progress_callback,
+        callback=progress_callback_with_cancel,
+        should_abort=should_abort,
     )
 
     # 重新组合结果（因为 inputs_array 包含了完整的 prompt）
     # 这里需要从翻译结果中提取纯文本
+    ensure_not_cancelled("翻译完成后")
     pfg.sp_file_result = results
     pfg.merge_result()
 
     # ==================== 5. 合并结果 ====================
+    ensure_not_cancelled("结果合并前")
     logger.info("=" * 60)
     logger.info("步骤 5/5: 合并结果并编译 PDF")
     logger.info("=" * 60)
@@ -356,6 +360,7 @@ def translate_arxiv_paper(
 
     # 编译 PDF（仍在 work_folder 中进行，然后复制到输出目录）
     if compile_pdf:
+        ensure_not_cancelled("PDF 编译前")
         logger.info("开始编译 PDF...")
 
         # 复制 tex 文件到 work_folder 用于编译

@@ -8,11 +8,11 @@ import datetime
 import os
 import sys
 from dataclasses import dataclass, field
-from typing import List, Optional
+from typing import List
 
 import tiktoken
 
-from arxiv_finder.llm_client import LLMClient, LLMResponse
+from llm_client import LLMClient
 from arxiv_finder.paper import Paper
 from arxiv_finder.utils import validate_title, export_to_markdown
 
@@ -61,7 +61,7 @@ class PaperSummarizer:
     # 公共接口
     # -----------------------------------------------------------------
 
-    def summarize(self, paper: Paper, session_id: Optional[str] = None) -> SummaryResult:
+    def summarize(self, paper: Paper) -> SummaryResult:
         """
         对单篇论文进行完整的三步总结。
 
@@ -74,32 +74,30 @@ class PaperSummarizer:
         # Step 1: Summary
         text = self._build_summary_text(paper)
         try:
-            resp = self._chat_summary(text, session_id=session_id)
-            result.summary_text = resp.result
+            result.summary_text = self._chat_summary(text)
         except Exception as e:
             print("summary_error:", e)
             self._print_exception()
             if "maximum context" in str(e):
                 token_offset = self._extract_token_offset(e)
-                resp = self._chat_summary(text, summary_prompt_token=token_offset + 1000 + 150,
-                                          session_id=session_id)
-                result.summary_text = resp.result
+                result.summary_text = self._chat_summary(
+                    text, summary_prompt_token=token_offset + 1000 + 150
+                )
 
         # Step 2: Method
         method_key = self._find_section_key(paper, ['method', 'approach'])
         if method_key:
             text = "<summary>" + result.summary_text + "\n\n<Methods>:\n\n" + paper.section_text_dict[method_key]
             try:
-                resp = self._chat_method(text, session_id=session_id)
-                result.method_text = resp.result
+                result.method_text = self._chat_method(text)
             except Exception as e:
                 print("method_error:", e)
                 self._print_exception()
                 if "maximum context" in str(e):
                     token_offset = self._extract_token_offset(e)
-                    resp = self._chat_method(text, method_prompt_token=token_offset + 800 + 150,
-                                             session_id=session_id)
-                    result.method_text = resp.result
+                    result.method_text = self._chat_method(
+                        text, method_prompt_token=token_offset + 800 + 150
+                    )
 
         # Step 3: Conclusion
         conclusion_key = self._find_section_key(paper, ['conclu'])
@@ -109,16 +107,15 @@ class PaperSummarizer:
         else:
             text = summary_text
         try:
-            resp = self._chat_conclusion(text, session_id=session_id)
-            result.conclusion_text = resp.result
+            result.conclusion_text = self._chat_conclusion(text)
         except Exception as e:
             print("conclusion_error:", e)
             self._print_exception()
             if "maximum context" in str(e):
                 token_offset = self._extract_token_offset(e)
-                resp = self._chat_conclusion(text, conclusion_prompt_token=token_offset + 800 + 150,
-                                             session_id=session_id)
-                result.conclusion_text = resp.result
+                result.conclusion_text = self._chat_conclusion(
+                    text, conclusion_prompt_token=token_offset + 800 + 150
+                )
 
         return result
 
@@ -206,8 +203,7 @@ class PaperSummarizer:
         # 第三步：利用字符串切片保留前半部分
         return text[:clip_index]
 
-    def _chat_summary(self, text: str, summary_prompt_token: int = 1100,
-                      session_id=None) -> LLMResponse:
+    def _chat_summary(self, text: str, summary_prompt_token: int = 1100) -> str:
         clip_text = self._clip_text(text, summary_prompt_token)
         messages = [
             {"role": "system",
@@ -238,10 +234,9 @@ class PaperSummarizer:
                  Be sure to use {} answers (proper nouns need to be marked in English), statements as concise and academic as possible, do not have too much repetitive information, numerical values using the original numbers, be sure to strictly follow the format, the corresponding content output to xxx, in accordance with \n line feed.
                  """.format(self.language, self.language, self.language)},
         ]
-        return self.llm.chat(messages, session_id=session_id)
+        return self.llm.chat(messages)
 
-    def _chat_method(self, text: str, method_prompt_token: int = 800,
-                     session_id=None) -> LLMResponse:
+    def _chat_method(self, text: str, method_prompt_token: int = 800) -> str:
         clip_text = self._clip_text(text, method_prompt_token)
         messages = [
             {"role": "system",
@@ -262,10 +257,9 @@ class PaperSummarizer:
                  Be sure to use {} answers (proper nouns need to be marked in English), statements as concise and academic as possible, do not repeat the content of the previous <summary>, the value of the use of the original numbers, be sure to strictly follow the format, the corresponding content output to xxx, in accordance with \n line feed, ....... means fill in according to the actual requirements, if not, you can not write.
                  """.format(self.language, self.language)},
         ]
-        return self.llm.chat(messages, session_id=session_id)
+        return self.llm.chat(messages)
 
-    def _chat_conclusion(self, text: str, conclusion_prompt_token: int = 800,
-                         session_id=None) -> LLMResponse:
+    def _chat_conclusion(self, text: str, conclusion_prompt_token: int = 800) -> str:
         clip_text = self._clip_text(text, conclusion_prompt_token)
         messages = [
             {"role": "system",
@@ -283,7 +277,7 @@ class PaperSummarizer:
                  Be sure to use {} answers (proper nouns need to be marked in English), statements as concise and academic as possible, do not repeat the content of the previous <summary>, the value of the use of the original numbers, be sure to strictly follow the format, the corresponding content output to xxx, in accordance with \n line feed, ....... means fill in according to the actual requirements, if not, you can not write.
                  """.format(self.language, self.language)},
         ]
-        return self.llm.chat(messages, session_id=session_id)
+        return self.llm.chat(messages)
 
     # -----------------------------------------------------------------
     # 辅助方法

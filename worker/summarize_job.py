@@ -14,7 +14,7 @@ sys.path.insert(0, str(ROOT))
 
 from loguru import logger
 from arxiv_finder.config import AppConfig
-from arxiv_finder.llm_client import LLMClient
+from llm_client import LLMClient
 from arxiv_finder.paper import Paper
 from arxiv_finder.summarizer import PaperSummarizer
 from db import get_db_manager, PaperStatus
@@ -48,7 +48,8 @@ def run_summarize(arxiv_id: str) -> str:
 
     # 初始化 LLM 和摘要器
     config = AppConfig()
-    llm = LLMClient(config)
+    api_base, api_key, model = config.resolve_llm_runtime()
+    llm = LLMClient(api_base=api_base, api_key=api_key, model=model)
     summarizer = PaperSummarizer(
         llm_client=llm,
         key_word=paper_record.search_keyword or '',

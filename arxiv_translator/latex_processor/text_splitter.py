@@ -5,11 +5,6 @@ latex_processor/text_splitter.py
 ================================================================================
 文本拆分工具
 
-【来源说明】
-本模块从 gpt_academic 项目抽取：
-- 原文件: gpt_academic/crazy_functions/pdf_fns/breakdown_txt.py
-- 原方法: breakdown_text_to_satisfy_token_limit()
-
 【功能】
 将长文本按 token 限制拆分成多个片段
 ================================================================================
@@ -26,7 +21,6 @@ def breakdown_text_to_satisfy_token_limit(
     """
     按 token 限制拆分文本
 
-    【来源】gpt_academic/crazy_functions/pdf_fns/breakdown_txt.py
 
     Args:
         text: 待拆分的文本

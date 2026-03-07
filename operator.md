@@ -28,7 +28,7 @@
   - 检索/摘要能力模块：`crawler.py`、`paper.py`、`summarizer.py`
 - `llm_client/`
   - 共享 LLM 客户端实现
-  - `arxiv_finder/llm_client.py` 为适配层，复用此实现
+  - `arxiv_finder/` 与 `worker/` 直接复用此实现
 
 ## 3. 环境准备
 

@@ -20,6 +20,7 @@ db/database.py  — 数据库连接管理 & 常用 CRUD 操作
 from __future__ import annotations
 
 import os
+import shutil
 from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
@@ -181,6 +182,25 @@ class DatabaseManager:
         with self._session() as s:
             return s.get(PaperRecord, arxiv_id)
 
+    def reset_paper_for_reprocess(self, arxiv_id: str) -> None:
+        """
+        重置论文处理状态到 DISCOVERED，并清理历史摘要/翻译结果字段。
+        """
+        with self._session() as s:
+            paper = s.get(PaperRecord, arxiv_id)
+            if paper is None:
+                raise ValueError(f"论文不存在: {arxiv_id}")
+
+            paper.status = PaperStatus.DISCOVERED
+            paper.summary_zh = None
+            paper.summary_error = ""
+            paper.translation_error = ""
+            paper.translated_pdf_path = None
+            paper.comparison_pdf_path = None
+            paper.summarized_at = None
+            paper.translated_at = None
+            paper.updated_at = datetime.utcnow()
+
     def list_papers(
         self,
         status: Optional[PaperStatus] = None,
@@ -283,10 +303,11 @@ class DatabaseManager:
     # TaskQueue CRUD
     # =========================================================================
 
-    def enqueue_tasks(self, arxiv_id: str) -> List[TaskQueue]:
+    def enqueue_tasks(self, arxiv_id: str, include_translate: bool = False) -> List[TaskQueue]:
         """
-        为论文创建串行任务队列：先 summarize，再 translate。
+        为论文创建任务队列。
 
+        默认仅创建 summarize 任务；当 include_translate=True 时再额外创建 translate。
         若该论文已有 PENDING/RUNNING 的同类任务，则跳过（防止重复入队）。
 
         Returns:
@@ -294,7 +315,11 @@ class DatabaseManager:
         """
         with self._session() as s:
             created = []
-            for task_type in [TaskType.SUMMARIZE, TaskType.TRANSLATE]:
+            task_types = [TaskType.SUMMARIZE]
+            if include_translate:
+                task_types.append(TaskType.TRANSLATE)
+
+            for task_type in task_types:
                 # 检查是否已有活跃任务
                 existing = (
                     s.query(TaskQueue)
@@ -321,7 +346,7 @@ class DatabaseManager:
         """
         重试失败的论文：
         1. 根据当前状态决定从哪一步重试
-           - SUMMARY_FAILED → 重新入队 summarize + translate
+           - SUMMARY_FAILED → 重新入队 summarize
            - TRANSLATION_FAILED → 重新入队 translate（跳过 summarize）
         2. 将论文状态重置为 DISCOVERED
 
@@ -334,7 +359,7 @@ class DatabaseManager:
                 raise ValueError(f"论文不存在: {arxiv_id}")
 
             if paper.status == PaperStatus.SUMMARY_FAILED:
-                task_types = [TaskType.SUMMARIZE, TaskType.TRANSLATE]
+                task_types = [TaskType.SUMMARIZE]
                 paper.status = PaperStatus.DISCOVERED
             elif paper.status == PaperStatus.TRANSLATION_FAILED:
                 task_types = [TaskType.TRANSLATE]
@@ -353,6 +378,82 @@ class DatabaseManager:
                 s.add(task)
                 created.append(task)
             return created
+
+    def enqueue_translate_task(self, arxiv_id: str) -> Optional[TaskQueue]:
+        """
+        手动触发翻译任务（用于“用户选择是否翻译”）。
+
+        仅允许以下状态触发：
+        - SUMMARIZED
+        - TRANSLATION_FAILED
+
+        若已有活跃的 translate 任务，返回该任务（幂等）。
+        若论文已是 TRANSLATING / TRANSLATED，不重复创建任务，返回 None。
+        """
+        with self._session() as s:
+            paper = s.get(PaperRecord, arxiv_id)
+            if paper is None:
+                raise ValueError(f"论文不存在: {arxiv_id}")
+
+            if paper.status in (PaperStatus.TRANSLATING, PaperStatus.TRANSLATED):
+                return None
+            if paper.status not in (PaperStatus.SUMMARIZED, PaperStatus.TRANSLATION_FAILED):
+                raise ValueError(
+                    f"当前状态不允许触发翻译: {paper.status.value}，仅支持 summarized / translation_failed"
+                )
+
+            existing = (
+                s.query(TaskQueue)
+                 .filter(
+                     TaskQueue.arxiv_id == arxiv_id,
+                     TaskQueue.task_type == TaskType.TRANSLATE,
+                     TaskQueue.status.in_([TaskStatus.PENDING, TaskStatus.RUNNING]),
+                 )
+                 .order_by(TaskQueue.created_at.asc())
+                 .first()
+            )
+            if existing:
+                return existing
+
+            task = TaskQueue(
+                arxiv_id=arxiv_id,
+                task_type=TaskType.TRANSLATE,
+                status=TaskStatus.PENDING,
+            )
+            s.add(task)
+            paper.updated_at = datetime.utcnow()
+            return task
+
+    def has_running_translate_task(self, arxiv_id: str) -> bool:
+        """检查论文是否存在正在执行中的翻译任务。"""
+        with self._session() as s:
+            task = (
+                s.query(TaskQueue.id)
+                 .filter(
+                     TaskQueue.arxiv_id == arxiv_id,
+                     TaskQueue.task_type == TaskType.TRANSLATE,
+                     TaskQueue.status == TaskStatus.RUNNING,
+                 )
+                 .first()
+            )
+            return task is not None
+
+    def cancel_pending_translate_tasks(self, arxiv_id: str) -> int:
+        """取消尚未执行的翻译任务（PENDING -> FAILED）。"""
+        with self._session() as s:
+            count = (
+                s.query(TaskQueue)
+                 .filter(
+                     TaskQueue.arxiv_id == arxiv_id,
+                     TaskQueue.task_type == TaskType.TRANSLATE,
+                     TaskQueue.status == TaskStatus.PENDING,
+                 )
+                 .update(
+                     {"status": TaskStatus.FAILED, "error_msg": "用户手动中断翻译任务"},
+                     synchronize_session=False,
+                 )
+            )
+            return int(count or 0)
 
     def next_pending_task(self) -> Optional[TaskQueue]:
         """
@@ -386,6 +487,137 @@ class DatabaseManager:
             task.status      = TaskStatus.COMPLETED if success else TaskStatus.FAILED
             task.finished_at = datetime.utcnow()
             task.error_msg   = error_msg or None
+
+    # =========================================================================
+    # 论文删除
+    # =========================================================================
+
+    def delete_paper(self, arxiv_id: str, delete_files: bool = True) -> dict:
+        """
+        删除论文记录及其关联的磁盘文件。
+
+        - 若该论文有 RUNNING 状态的任务，抛出 RuntimeError（调用方返回 409）
+        - TaskQueue 记录通过 CASCADE 自动级联删除
+        - 返回 {"freed_bytes": N, "deleted_files": [...]}
+        """
+        with self._session() as s:
+            paper = s.get(PaperRecord, arxiv_id)
+            if paper is None:
+                raise ValueError(f"论文不存在: {arxiv_id}")
+
+            # 检查是否有正在运行的任务
+            running = (
+                s.query(TaskQueue)
+                 .filter(
+                     TaskQueue.arxiv_id == arxiv_id,
+                     TaskQueue.status == TaskStatus.RUNNING,
+                 )
+                 .first()
+            )
+            if running:
+                raise RuntimeError(
+                    f"论文 {arxiv_id} 当前有正在执行的任务（id={running.id}），"
+                    "请等待完成后再删除，或使用 force=true 强制删除。"
+                )
+
+            freed_bytes = 0
+            deleted_files: List[str] = []
+
+            if delete_files:
+                # 优先删除整个 LaTeX 缓存目录（包含编译产物和 PDF）
+                if paper.latex_cache_dir:
+                    cache_dir = Path(paper.latex_cache_dir)
+                    if cache_dir.exists() and cache_dir.is_dir():
+                        try:
+                            freed_bytes += sum(
+                                f.stat().st_size
+                                for f in cache_dir.rglob("*")
+                                if f.is_file()
+                            )
+                            shutil.rmtree(cache_dir, ignore_errors=True)
+                            deleted_files.append(str(cache_dir))
+                        except Exception:
+                            pass
+
+                # 删除独立的 PDF 文件（若不在 latex_cache_dir 内）
+                for pdf_path_str in [
+                    paper.comparison_pdf_path,
+                    paper.translated_pdf_path,
+                    paper.original_pdf_path,
+                ]:
+                    if not pdf_path_str:
+                        continue
+                    pdf_path = Path(pdf_path_str)
+                    if not pdf_path.exists():
+                        continue
+                    # 如果已经被 latex_cache_dir 覆盖删掉则跳过
+                    if paper.latex_cache_dir and str(pdf_path).startswith(
+                        str(Path(paper.latex_cache_dir))
+                    ):
+                        continue
+                    try:
+                        freed_bytes += pdf_path.stat().st_size
+                        pdf_path.unlink(missing_ok=True)
+                        deleted_files.append(str(pdf_path))
+                    except Exception:
+                        pass
+
+            # 删除数据库记录（TaskQueue 通过 CASCADE 自动删除）
+            s.delete(paper)
+
+        return {"freed_bytes": freed_bytes, "deleted_files": deleted_files}
+
+    def force_cancel_running_tasks(self, arxiv_id: str) -> None:
+        """
+        强制取消指定论文的正在运行任务（用于 force=true 删除场景）。
+        将 RUNNING/PENDING 任务标记为 FAILED。
+        """
+        with self._session() as s:
+            s.query(TaskQueue).filter(
+                TaskQueue.arxiv_id == arxiv_id,
+                TaskQueue.status.in_([TaskStatus.RUNNING, TaskStatus.PENDING]),
+            ).update(
+                {"status": TaskStatus.FAILED, "error_msg": "用户强制删除，任务已取消"},
+                synchronize_session=False,
+            )
+
+    # =========================================================================
+    # 僵尸任务修复
+    # =========================================================================
+
+    def reset_stuck_tasks(self) -> int:
+        """
+        修复服务器崩溃/重启后遗留的僵尸 RUNNING 任务。
+
+        1. 将 RUNNING 的 TaskQueue 记录重置为 PENDING
+        2. 将对应论文状态从 SUMMARIZING/TRANSLATING 回退到上一个稳定状态
+
+        Returns:
+            修复的任务数量
+        """
+        with self._session() as s:
+            stuck_tasks = (
+                s.query(TaskQueue)
+                 .filter(TaskQueue.status == TaskStatus.RUNNING)
+                 .all()
+            )
+            if not stuck_tasks:
+                return 0
+
+            for task in stuck_tasks:
+                task.status     = TaskStatus.PENDING
+                task.started_at = None
+
+                # 回退论文状态
+                paper = s.get(PaperRecord, task.arxiv_id)
+                if paper is None:
+                    continue
+                if paper.status == PaperStatus.SUMMARIZING:
+                    paper.status = PaperStatus.DISCOVERED
+                elif paper.status == PaperStatus.TRANSLATING:
+                    paper.status = PaperStatus.SUMMARIZED
+
+            return len(stuck_tasks)
 
     def get_queue_status(self) -> dict:
         """

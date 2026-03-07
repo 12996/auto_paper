@@ -5,22 +5,6 @@ llm_client/llm_client.py
 ================================================================================
 LLM 调用客户端
 
-【来源说明】
-本模块从 gpt_academic 项目抽取并简化：
-
-1. predict_no_ui_long_connection()
-   - 原文件: gpt_academic/request_llms/bridge_chatgpt.py
-   - 功能: 调用 OpenAI API 获取响应
-
-2. request_gpt_model_multi_threads_with_very_awesome_ui_and_high_efficiency()
-   - 原文件: gpt_academic/crazy_functions/crazy_utils.py:187-350
-   - 功能: 多线程批量调用 LLM
-
-【主要修改】
-- 移除 Gradio UI 依赖
-- 使用 openai 库直接调用
-- 简化多线程逻辑
-- 添加进度回调
 
 【使用方法】
     from llm_client import LLMClient
@@ -50,10 +34,6 @@ except ImportError:
 class LLMClient:
     """
     LLM 调用客户端
-
-    【来源】整合自:
-    - gpt_academic/request_llms/bridge_chatgpt.py
-    - gpt_academic/request_llms/bridge_all.py
 
     支持所有 OpenAI 兼容的 API。
     """
@@ -98,7 +78,7 @@ class LLMClient:
         """
         发送聊天请求
 
-        【来源】gpt_academic/request_llms/bridge_chatgpt.py (predict_no_ui_long_connection)
+
 
         Args:
             messages: 消息列表，格式为 [{"role": "user", "content": "..."}]
@@ -146,11 +126,10 @@ class LLMClient:
         user_prompt: str,
         max_retries: int = 3,
         retry_delay: int = 5,
+        should_abort: Optional[Callable[[], bool]] = None,
     ) -> str:
         """
         带重试的翻译
-
-        【来源】gpt_academic/crazy_functions/crazy_utils.py:103-147
         (_req_gpt 内部逻辑)
 
         Args:
@@ -170,12 +149,16 @@ class LLMClient:
 
         last_error = None
         for attempt in range(max_retries):
+            if should_abort and should_abort():
+                raise RuntimeError("用户手动中断翻译任务")
             try:
                 return self.chat(messages)
             except Exception as e:
                 last_error = e
                 logger.warning(f"翻译失败 (尝试 {attempt + 1}/{max_retries}): {e}")
                 if attempt < max_retries - 1:
+                    if should_abort and should_abort():
+                        raise RuntimeError("用户手动中断翻译任务")
                     wait = retry_delay + random.randint(0, 5)
                     logger.info(f"等待 {wait} 秒后重试...")
                     time.sleep(wait)
@@ -190,11 +173,11 @@ def translate_batch(
     llm_client: LLMClient,
     max_workers: int = 5,
     callback: Optional[Callable[[int, int, str], None]] = None,
+    should_abort: Optional[Callable[[], bool]] = None,
 ) -> List[str]:
     """
     多线程批量翻译
 
-    【来源】gpt_academic/crazy_functions/crazy_utils.py:187-350
     (request_gpt_model_multi_threads_with_very_awesome_ui_and_high_efficiency)
 
     Args:
@@ -216,10 +199,13 @@ def translate_batch(
     def _translate_task(index: int, text: str, sys_prompt: str, user_prompt: str) -> tuple:
         """单个翻译任务"""
         try:
+            if should_abort and should_abort():
+                return index, text, "failed: 用户手动中断翻译任务"
             result = llm_client.translate_with_retry(
                 text=text,
                 system_prompt=sys_prompt,
                 user_prompt=user_prompt,
+                should_abort=should_abort,
             )
             return index, result, "success"
         except Exception as e:
@@ -228,6 +214,8 @@ def translate_batch(
 
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         # 提交所有任务
+        if should_abort and should_abort():
+            raise RuntimeError("用户手动中断翻译任务")
         futures = {
             executor.submit(_translate_task, i, texts[i], system_prompts[i], user_prompts[i]): i
             for i in range(n_tasks)
@@ -236,6 +224,8 @@ def translate_batch(
         # 收集结果
         completed = 0
         for future in as_completed(futures):
+            if should_abort and should_abort():
+                raise RuntimeError("用户手动中断翻译任务")
             index, result, status = future.result()
             results[index] = result
             completed += 1
@@ -256,7 +246,6 @@ def generate_translation_prompts(
     """
     生成翻译提示词
 
-    【来源】gpt_academic/crazy_functions/Latex_Function.py:14-41
     (switch_prompt 函数)
 
     Args:

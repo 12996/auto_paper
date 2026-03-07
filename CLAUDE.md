@@ -4,7 +4,6 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## 项目概述
 
-ArXiv 论文翻译器 - 从 [gpt_academic](https://github.com/binary-husky/gpt_academic) 抽取的独立命令行工具，将 ArXiv 英文论文翻译为中文 PDF。
 
 ## 常用命令
 

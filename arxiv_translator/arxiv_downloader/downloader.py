@@ -5,17 +5,7 @@ arxiv_downloader/downloader.py
 ================================================================================
 ArXiv 论文下载器实现
 
-【来源说明】
-本模块从 gpt_academic 项目抽取，主要来源：
 
-1. arxiv_download() 函数
-   - 原文件: gpt_academic/crazy_functions/Latex_Function.py
-   - 原行号: 第91-178行
-   - 功能: 下载 arxiv 论文源码并解压
-
-2. 辅助函数
-   - check_cached_translation_pdf(): 检查缓存 (原第92-103行)
-   - is_float(): 判断是否为浮点数 (原第105-110行)
 
 【主要修改】
 - 移除对 chatbot/UI 的依赖，改为日志输出
@@ -45,7 +35,6 @@ class ArxivDownloader:
     """
     ArXiv 论文下载器
 
-    【来源】gpt_academic/crazy_functions/Latex_Function.py
     【原类】无（原为独立函数 arxiv_download）
     【重构】将函数逻辑封装为类，便于管理状态和配置
 
@@ -78,7 +67,6 @@ class ArxivDownloader:
         """
         判断字符串是否为浮点数
 
-        【来源】gpt_academic/crazy_functions/Latex_Function.py:105-110
         """
         try:
             float(s)
@@ -90,7 +78,6 @@ class ArxivDownloader:
         """
         解析输入，提取 arxiv ID 和构建标准 URL
 
-        【来源】gpt_academic/crazy_functions/Latex_Function.py:112-121
         【修改】返回 (arxiv_id, abs_url) 元组
 
         支持的输入格式：
@@ -140,7 +127,6 @@ class ArxivDownloader:
         """
         检查是否已有缓存的翻译结果
 
-        【来源】gpt_academic/crazy_functions/Latex_Function.py:92-103
         【修改】返回 Path 对象而非字符串
 
         Args:
@@ -161,8 +147,6 @@ class ArxivDownloader:
     def _download_source(self, arxiv_id: str, abs_url: str) -> Path:
         """
         下载 arxiv 论文源码
-
-        【来源】gpt_academic/crazy_functions/Latex_Function.py:147-164
         【修改】移除 yield 生成器模式，改为直接返回
 
         Args:
@@ -206,7 +190,6 @@ class ArxivDownloader:
         """
         解压 tar 文件
 
-        【来源】gpt_academic/crazy_functions/Latex_Function.py:172-178
         【修改】添加更详细的错误处理
 
         Args:
@@ -237,7 +220,6 @@ class ArxivDownloader:
         """
         下载 arxiv 论文并解压
 
-        【来源】gpt_academic/crazy_functions/Latex_Function.py:91-178 (arxiv_download 函数)
         【修改】整合所有步骤为单一方法，返回解压路径和 arxiv ID
 
         Args:
@@ -287,7 +269,7 @@ def download_arxiv_paper(
     """
     便捷函数：下载 arxiv 论文
 
-    【来源】gpt_academic/crazy_functions/Latex_Function.py:91-178
+
     【说明】这是 ArxivDownloader.download() 的快捷包装
 
     Args:

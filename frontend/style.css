@@ -173,6 +173,40 @@ body::before {
     font-size: 12px;
 }
 
+/* 论文卡片删除按钮：透明 hover 变红 */
+.btn-ghost-delete {
+    background: transparent;
+    border-color: transparent;
+    color: var(--text-muted);
+    opacity: 0;
+    transition: opacity var(--transition), color var(--transition), background var(--transition);
+}
+
+.paper-card:hover .btn-ghost-delete {
+    opacity: 1;
+}
+
+.btn-ghost-delete:hover {
+    background: var(--red-bg) !important;
+    border-color: rgba(255, 94, 125, .3) !important;
+    color: var(--red) !important;
+    transform: none;
+}
+
+/* 顶部工具栏危险操作按钮 */
+.btn-danger-ghost {
+    background: transparent;
+    border-color: transparent;
+    color: var(--text-muted);
+    font-size: 13px;
+}
+
+.btn-danger-ghost:hover {
+    background: var(--red-bg);
+    border-color: rgba(255, 94, 125, .3);
+    color: var(--red);
+}
+
 /* ---------- 顶部导航 ---------- */
 .topbar {
     position: sticky;
@@ -280,9 +314,17 @@ body::before {
 
 .filter-bar {
     display: flex;
+    align-items: center;
+    justify-content: space-between;
     gap: 8px;
     flex-wrap: wrap;
     margin-bottom: 18px;
+}
+
+.filter-tabs {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
 }
 
 .filter-btn {

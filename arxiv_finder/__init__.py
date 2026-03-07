@@ -5,7 +5,7 @@
 # 用法示例:
 #   from arxiv_finder.config import AppConfig
 #   from arxiv_finder.paper import Paper
-#   from arxiv_finder.llm_client import LLMClient
+#   from llm_client import LLMClient
 #   from arxiv_finder.crawler import ArxivWebCrawler
 #   from arxiv_finder.summarizer import PaperSummarizer
 #   from arxiv_finder.translator import PaperTranslator

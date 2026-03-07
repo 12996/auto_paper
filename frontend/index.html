@@ -61,12 +61,16 @@
   <!-- 过滤标签 + 列表 -->
   <section class="list-section">
     <div class="filter-bar">
-      <button class="filter-btn active" data-status="">全部</button>
-      <button class="filter-btn" data-status="translated">已翻译</button>
-      <button class="filter-btn" data-status="summarized">已总结</button>
-      <button class="filter-btn" data-status="pending">处理中</button>
-      <button class="filter-btn" data-status="failed">失败</button>
+      <div class="filter-tabs">
+        <button class="filter-btn active" data-status="">全部</button>
+        <button class="filter-btn" data-status="translated">已翻译</button>
+        <button class="filter-btn" data-status="summarized">已总结</button>
+        <button class="filter-btn" data-status="pending">处理中</button>
+        <button class="filter-btn" data-status="failed">失败</button>
+      </div>
+      <button class="btn btn-ghost btn-danger-ghost" id="btn-delete-failed" title="清空所有失败论文">🗑 清空失败项</button>
     </div>
+
 
     <div id="paper-list-container">
       <div id="paper-list"></div>

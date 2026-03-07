@@ -14,7 +14,7 @@
   - `chat_arxiv.py`、`api/search.py` 已统一使用 `arxiv_finder.*`
 - `llm_client/`
   - 全局共享 LLM 客户端实现
-  - `arxiv_finder/llm_client.py` 已改为适配层，复用这里的实现，不再双份维护
+  - `arxiv_finder/` 与 `worker/` 直接复用这里的实现，不再维护第二份客户端
 
 ## 项目结构
 
@@ -33,7 +33,7 @@ F:\claude\arxiv_translator
 │  ├─ paper.py
 │  ├─ summarizer.py
 │  ├─ translator.py
-│  └─ llm_client.py   # adapter -> root llm_client/
+│  └─ ...
 ├─ llm_client/
 ├─ api/
 ├─ worker/
@@ -58,13 +58,19 @@ pip install -r requirements.txt
 
 ### 翻译链路
 
-编辑 `config.py`：
+复制 `.env.example` 为 `.env` 并按需修改：
 
-- `API_BASE`
-- `API_KEY`
-- `MODEL_NAME`
-- `CACHE_DIR`
-- `OUTPUT_DIR`
+- `ARXIV_LLM_PROVIDER`（`local` / `deepseek` / `gemini` / `custom`）
+- `ARXIV_API_BASE`
+- `ARXIV_API_KEY`
+- `ARXIV_MODEL`
+
+说明：
+
+- `config.py` 会自动加载项目根目录 `.env`
+- 当 `ARXIV_LLM_PROVIDER=deepseek` 时使用 `ARXIV_DEEPSEEK_*`
+- 当 `ARXIV_LLM_PROVIDER=gemini` 时使用 `ARXIV_GEMINI_*`
+- `CACHE_DIR`、`OUTPUT_DIR` 仍在 `config.py` 中维护
 
 ### 检索/摘要链路
 

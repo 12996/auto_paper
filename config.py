@@ -5,9 +5,6 @@ config.py
 ================================================================================
 配置文件
 
-【来源说明】
-本配置参考 gpt_academic 项目的配置结构：
-- gpt_academic/config.py
 
 【配置项说明】
 - API 相关: API 地址、密钥、模型名称
@@ -27,14 +24,76 @@ config.py
 import os
 from pathlib import Path
 
+from dotenv import load_dotenv
+
+# Load .env from project root before reading environment variables.
+_PROJECT_ROOT = Path(__file__).resolve().parent
+load_dotenv(dotenv_path=_PROJECT_ROOT / ".env")
+
 # ============================================================================
 # API 配置（支持环境变量覆盖）
 # ============================================================================
 
-# OpenAI 兼容 API 配置
-API_BASE = os.environ.get("ARXIV_API_BASE", "http://127.0.0.1:30002/v1")
-API_KEY = os.environ.get("ARXIV_API_KEY", "sk-local")  # 本地 API 通常不需要真实密钥
-MODEL_NAME = os.environ.get("ARXIV_MODEL", "deepseek-chat")  # 模型名称
+def _normalize_base_url(url: str) -> str:
+    base = (url or "").strip().rstrip("/")
+    # 兼容误填为 /v1/models 的配置，避免 OpenAI SDK 拼接后 404。
+    if base.endswith("/models"):
+        base = base[:-len("/models")]
+    return base
+
+
+def resolve_llm_runtime_from_env() -> tuple[str, str, str, str]:
+    """
+    从 .env / 环境变量解析 LLM 运行时。
+
+    返回: (provider, api_base, api_key, model)
+    provider: local | deepseek | gemini | custom
+    """
+    provider = os.environ.get("ARXIV_LLM_PROVIDER", "custom").strip().lower()
+
+    # 默认保留现有行为：读取 ARXIV_API_*，用于本地 OpenAI-compatible 网关。
+    if provider in ("", "custom", "local"):
+        api_base = _normalize_base_url(
+            os.environ.get("ARXIV_API_BASE", "http://127.0.0.1:8317/v1/")
+        )
+        api_key = os.environ.get("ARXIV_API_KEY", "")
+        model = os.environ.get("ARXIV_MODEL", "gpt-5")
+        return "local" if provider == "local" else "custom", api_base, api_key, model
+
+    if provider == "deepseek":
+        api_base = _normalize_base_url(
+            os.environ.get("ARXIV_DEEPSEEK_API_BASE", "https://api.deepseek.com/v1")
+        )
+        api_key = (
+            os.environ.get("ARXIV_DEEPSEEK_API_KEY")
+            or os.environ.get("DEEPSEEK_API_KEY")
+            or ""
+        )
+        model = os.environ.get("ARXIV_DEEPSEEK_MODEL", "deepseek-chat")
+        return provider, api_base, api_key, model
+
+    if provider == "gemini":
+        # Gemini OpenAI-compatible endpoint.
+        api_base = _normalize_base_url(
+            os.environ.get(
+                "ARXIV_GEMINI_API_BASE",
+                "https://generativelanguage.googleapis.com/v1beta/openai",
+            )
+        )
+        api_key = (
+            os.environ.get("ARXIV_GEMINI_API_KEY")
+            or os.environ.get("GEMINI_API_KEY")
+            or ""
+        )
+        model = os.environ.get("ARXIV_GEMINI_MODEL", "gemini-2.5-pro")
+        return provider, api_base, api_key, model
+
+    raise ValueError(
+        f"Unsupported ARXIV_LLM_PROVIDER={provider!r}. Use local/deepseek/gemini/custom."
+    )
+
+
+LLM_PROVIDER, API_BASE, API_KEY, MODEL_NAME = resolve_llm_runtime_from_env()
 
 # 模型参数
 TEMPERATURE = 0.3  # 翻译任务建议使用较低温度

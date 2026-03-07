@@ -10,7 +10,7 @@ import sys
 from collections import namedtuple
 
 from arxiv_finder.config import AppConfig
-from arxiv_finder.llm_client import LLMClient
+from llm_client import LLMClient
 from arxiv_finder.crawler import ArxivWebCrawler
 from arxiv_finder.summarizer import PaperSummarizer
 
@@ -42,7 +42,8 @@ ArxivParams = namedtuple(
 def chat_arxiv_main(args):
     """使用 arXiv 网页搜索论文并生成 LLM 总结。"""
     config = AppConfig()
-    llm = LLMClient(config)
+    api_base, api_key, model = config.resolve_llm_runtime()
+    llm = LLMClient(api_base=api_base, api_key=api_key, model=model)
 
     # 爬取论文
     crawler = ArxivWebCrawler(root_path='./')

@@ -4,6 +4,12 @@
 
 import configparser
 import os
+from pathlib import Path
+
+from dotenv import load_dotenv
+
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent
+load_dotenv(dotenv_path=_PROJECT_ROOT / ".env")
 
 
 class AppConfig:
@@ -95,3 +101,63 @@ class AppConfig:
             'repo': self._config.get('Gitee', 'repo', fallback=''),
             'path': self._config.get('Gitee', 'path', fallback=''),
         }
+
+    def resolve_llm_runtime(self) -> tuple[str, str, str]:
+        # 优先使用统一环境变量配置（与主翻译链路一致）。
+        provider = os.environ.get("ARXIV_LLM_PROVIDER", "").strip().lower()
+        if provider:
+            if provider in ("local", "custom"):
+                api_base = (os.environ.get("ARXIV_API_BASE", "http://127.0.0.1:8317/v1/") or "").strip().rstrip("/")
+                if api_base.endswith("/models"):
+                    api_base = api_base[:-len("/models")]
+                return (
+                    api_base,
+                    os.environ.get("ARXIV_API_KEY", ""),
+                    os.environ.get("ARXIV_MODEL", "gpt-5"),
+                )
+            if provider == "deepseek":
+                api_base = (os.environ.get("ARXIV_DEEPSEEK_API_BASE", "https://api.deepseek.com/v1") or "").strip().rstrip("/")
+                return (
+                    api_base,
+                    os.environ.get("ARXIV_DEEPSEEK_API_KEY") or os.environ.get("DEEPSEEK_API_KEY", ""),
+                    os.environ.get("ARXIV_DEEPSEEK_MODEL", "deepseek-chat"),
+                )
+            if provider == "gemini":
+                api_base = (
+                    os.environ.get(
+                        "ARXIV_GEMINI_API_BASE",
+                        "https://generativelanguage.googleapis.com/v1beta/openai",
+                    )
+                    or ""
+                ).strip().rstrip("/")
+                return (
+                    api_base,
+                    os.environ.get("ARXIV_GEMINI_API_KEY") or os.environ.get("GEMINI_API_KEY", ""),
+                    os.environ.get("ARXIV_GEMINI_MODEL", "gemini-2.5-pro"),
+                )
+            raise ValueError(
+                f"Unsupported ARXIV_LLM_PROVIDER={provider!r}. Use local/deepseek/gemini/custom."
+            )
+
+        if self.use_local_model:
+            local = self.local_model_config
+            return local["api_base"], local["api_key"], local["model"]
+
+        openai_cfg = self.openai_config
+        api_keys = openai_cfg.get("api_keys", []) if openai_cfg else []
+        if openai_cfg and api_keys:
+            return (
+                openai_cfg.get("api_base", "https://api.openai.com/v1"),
+                api_keys[0],
+                openai_cfg.get("model", "gpt-3.5-turbo"),
+            )
+
+        azure_cfg = self.azure_config
+        if azure_cfg and azure_cfg.get("api_key"):
+            return (
+                azure_cfg.get("api_base", "https://api.openai.com/v1"),
+                azure_cfg["api_key"],
+                azure_cfg.get("model", "gpt-3.5-turbo"),
+            )
+
+        raise ValueError("No available LLM config found in apikey.ini.")

@@ -6,9 +6,7 @@ arxiv_downloader/__init__.py
 ArXiv 论文下载模块
 
 【来源说明】
-本模块从 gpt_academic 项目抽取，主要来源文件：
-- 原文件: gpt_academic/crazy_functions/Latex_Function.py
-- 原方法: arxiv_download() (第91-178行)
+
 
 【功能说明】
 1. 解析 arxiv 论文 ID 或 URL

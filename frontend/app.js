@@ -151,6 +151,15 @@ function renderPaperList(papers, total) {
     list.querySelectorAll('[data-retry]').forEach(btn => {
         btn.addEventListener('click', () => retryPaper(btn.dataset.retry));
     });
+    list.querySelectorAll('[data-translate]').forEach(btn => {
+        btn.addEventListener('click', () => startTranslate(btn.dataset.translate));
+    });
+    list.querySelectorAll('[data-interrupt]').forEach(btn => {
+        btn.addEventListener('click', () => interruptTranslate(btn.dataset.interrupt));
+    });
+    list.querySelectorAll('[data-delete]').forEach(btn => {
+        btn.addEventListener('click', () => deletePaper(btn.dataset.delete, btn.dataset.title));
+    });
 }
 
 function paperCardHTML(p) {
@@ -183,8 +192,18 @@ function paperCardHTML(p) {
     } else if (isSummarized) {
         actionsHTML += `<button class="btn btn-sm" data-view="${p.arxiv_id}">查看详情</button>`;
     }
+    if (p.status === 'summarized') {
+        actionsHTML += `<button class="btn btn-sm btn-primary" data-translate="${p.arxiv_id}">开始翻译</button>`;
+    }
+    if (p.status === 'translating') {
+        actionsHTML += `<button class="btn btn-sm btn-danger" data-interrupt="${p.arxiv_id}">中断翻译</button>`;
+    }
     if (isFailed) {
         actionsHTML += `<button class="btn btn-sm btn-danger" data-retry="${p.arxiv_id}">🔄 重试</button>`;
+    }
+    // 删除按钮（处理中的论文不允许直接删除）
+    if (!isPending) {
+        actionsHTML += `<button class="btn btn-sm btn-ghost-delete" data-delete="${p.arxiv_id}" data-title="${escapeHTML(truncate(p.title || p.arxiv_id, 30))}" title="删除此论文">🗑</button>`;
     }
 
     return `
@@ -300,11 +319,19 @@ async function openDetail(arxivId) {
             const summaryBlock = p.summary_zh
                 ? `<div class="summary-box">${escapeHTML(p.summary_zh)}</div>`
                 : '';
+            const translateButton = p.status === 'summarized'
+                ? `<button class="btn btn-primary" onclick="startTranslate('${arxivId}')">🚀 开始翻译</button>`
+                : '';
+            const interruptButton = p.status === 'translating'
+                ? `<button class="btn btn-danger" onclick="interruptTranslate('${arxivId}')">⏹ 中断翻译</button>`
+                : '';
             phEl.innerHTML = `
         <div class="pdf-placeholder-icon">📄</div>
         <h3>翻译尚未完成</h3>
         <p>当前状态：${st.icon} ${st.label}${p.translation_error ? `<br><span style="color:var(--red)">${escapeHTML(p.translation_error)}</span>` : ''}</p>
         ${summaryBlock}
+        ${translateButton}
+        ${interruptButton}
         ${FAILED_STATUSES.includes(p.status) ? `<button class="btn btn-danger" onclick="retryPaper('${arxivId}')">🔄 重新翻译</button>` : ''}
       `;
         }
@@ -330,6 +357,37 @@ async function retryPaper(arxivId) {
         ensurePolling();
     } catch (e) {
         toast(`重试失败: ${e.message}`, 'error');
+    }
+}
+
+async function startTranslate(arxivId) {
+    try {
+        const data = await apiFetch(`/api/papers/${arxivId}/translate`, { method: 'POST' });
+        toast(data.message || '已触发翻译任务', 'success');
+        loadPapers(state.currentPage);
+        loadStats();
+        ensurePolling();
+        if (state.currentDetailId === arxivId) {
+            openDetail(arxivId);
+        }
+    } catch (e) {
+        toast(`触发翻译失败: ${e.message}`, 'error');
+    }
+}
+
+async function interruptTranslate(arxivId) {
+    if (!confirm('确认中断当前翻译任务？')) return;
+    try {
+        const data = await apiFetch(`/api/papers/${arxivId}/interrupt`, { method: 'POST' });
+        toast(data.message || '已发送中断请求', 'info');
+        loadPapers(state.currentPage);
+        loadStats();
+        ensurePolling();
+        if (state.currentDetailId === arxivId) {
+            openDetail(arxivId);
+        }
+    } catch (e) {
+        toast(`中断失败: ${e.message}`, 'error');
     }
 }
 
@@ -528,5 +586,49 @@ async function init() {
         }
     }, 60000);
 }
+
+// ─── 删除单篇论文 ─────────────────────────────────────────────
+async function deletePaper(arxivId, title) {
+    const displayTitle = title || arxivId;
+    if (!confirm(`确认删除论文？\n\n「${displayTitle}」\n\n此操作将同时删除相关磁盘文件，不可撤销。`)) return;
+
+    try {
+        const data = await apiFetch(`/api/papers/${arxivId}`, { method: 'DELETE' });
+        // 从 DOM 中移除对应卡片（避免整页刷新）
+        const card = document.getElementById(`card-${arxivId}`);
+        if (card) {
+            card.style.transition = 'opacity 0.3s, transform 0.3s';
+            card.style.opacity = '0';
+            card.style.transform = 'translateX(20px)';
+            setTimeout(() => card.remove(), 300);
+        }
+        const freed = data.freed_mb > 0 ? `，释放 ${data.freed_mb} MB` : '';
+        toast(`已删除「${displayTitle}」${freed}`, 'success');
+        setTimeout(() => { loadStats(); loadPapers(state.currentPage); }, 400);
+    } catch (e) {
+        if (e.message && e.message.includes('正在执行')) {
+            toast(`无法删除：论文正在处理中。如需强制删除请稍后重试。`, 'error');
+        } else {
+            toast(`删除失败: ${e.message}`, 'error');
+        }
+    }
+}
+
+// ─── 批量清空失败项 ───────────────────────────────────────────
+async function deleteAllFailed() {
+    if (!confirm('确认清空所有失败状态的论文？\n\n此操作将同时删除相关磁盘文件，不可撤销。')) return;
+
+    try {
+        const data = await apiFetch('/api/papers?status=failed', { method: 'DELETE' });
+        const freed = data.freed_mb > 0 ? `，释放 ${data.freed_mb} MB` : '';
+        toast(`${data.message}${freed}`, 'success');
+        loadStats();
+        loadPapers(1);
+    } catch (e) {
+        toast(`批量删除失败: ${e.message}`, 'error');
+    }
+}
+
+document.getElementById('btn-delete-failed').addEventListener('click', deleteAllFailed);
 
 init();

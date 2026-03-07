@@ -5,10 +5,6 @@ llm_client/prompts.py
 ================================================================================
 翻译提示词模板
 
-【来源说明】
-本模块从 gpt_academic 项目抽取：
-- 原文件: gpt_academic/crazy_functions/Latex_Function.py:14-41
-- 原方法: switch_prompt()
 
 【功能】
 生成翻译和润色的提示词
@@ -26,7 +22,6 @@ def get_translate_prompt(
     """
     生成中译提示词
 
-    【来源】gpt_academic/crazy_functions/Latex_Function.py:32-38
 
     Args:
         text_fragments: 文本片段列表
@@ -58,8 +53,6 @@ def get_proofread_prompt(
     """
     生成润色提示词
 
-    【来源】gpt_academic/crazy_functions/Latex_Function.py:26-31
-
     Args:
         text_fragments: 文本片段列表
         more_requirement: 额外要求
@@ -90,8 +83,6 @@ def switch_prompt(
 ) -> Tuple[List[str], List[str]]:
     """
     根据模式生成提示词
-
-    【来源】gpt_academic/crazy_functions/Latex_Function.py:14-41
     (完整函数)
 
     Args:

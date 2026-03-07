@@ -2,6 +2,7 @@
 
 # OpenAI API 客户端
 openai>=1.0.0
+python-dotenv>=1.0.1
 
 # Token 计数
 tiktoken>=0.3.3
@@ -17,3 +18,5 @@ PyPDF2>=2.0.0
 
 # Latex 编译需要系统安装 texlive 或 miktex
 # 请确保 pdflatex 或 xelatex 在 PATH 中
+
+dotenv=1.2.2

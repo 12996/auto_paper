@@ -14,6 +14,27 @@ from loguru import logger
 from db import get_db_manager, PaperStatus
 import config as cfg
 
+_CANCEL_FLAG_NAME = ".cancel_translate"
+
+
+def _cancel_flag_path(arxiv_id: str) -> Path:
+    return Path(cfg.CACHE_DIR) / arxiv_id / _CANCEL_FLAG_NAME
+
+
+def request_translate_interrupt(arxiv_id: str) -> str:
+    """写入翻译中断标记，供翻译流程轮询退出。"""
+    flag = _cancel_flag_path(arxiv_id)
+    flag.parent.mkdir(parents=True, exist_ok=True)
+    flag.write_text("interrupt", encoding="utf-8")
+    return str(flag)
+
+
+def clear_translate_interrupt(arxiv_id: str) -> None:
+    """清理翻译中断标记（避免历史标记影响后续任务）。"""
+    flag = _cancel_flag_path(arxiv_id)
+    if flag.exists():
+        flag.unlink(missing_ok=True)
+
 
 def run_translate(arxiv_id: str) -> dict:
     """
@@ -35,6 +56,8 @@ def run_translate(arxiv_id: str) -> dict:
     paper_record = db.get_paper(arxiv_id)
     if paper_record is None:
         raise ValueError(f"论文不存在于数据库: {arxiv_id}")
+
+    clear_translate_interrupt(arxiv_id)
 
     logger.info(f"[翻译] 开始处理: {arxiv_id} - {paper_record.title[:60]}")
 

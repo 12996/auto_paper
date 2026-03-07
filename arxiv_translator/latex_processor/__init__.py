@@ -5,11 +5,6 @@ latex_processor/__init__.py
 ================================================================================
 Latex 论文处理模块
 
-【来源说明】
-本模块从 gpt_academic 项目抽取，主要来源文件：
-- gpt_academic/crazy_functions/latex_fns/latex_actions.py
-- gpt_academic/crazy_functions/latex_fns/latex_toolbox.py
-- gpt_academic/crazy_functions/latex_fns/latex_pickle_io.py
 
 【功能说明】
 1. Latex 文件智能切分（保留公式、表格、引用等）
